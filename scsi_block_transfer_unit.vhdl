@@ -35,26 +35,40 @@ end;
 -- + read and respond to scsi_data_err
 -- + provide a method for the controller to cancel a transfer
 architecture behavioral of scsi_block_transfer_unit is
-	type state_t is (IDLE, START, READ_WAIT, WRITE_WAIT);
-
-	signal state : state_t;
-	signal state_in : state_t;
+	signal state : std_logic_vector(3 downto 0);
 	signal in_progress : std_logic;
 	signal direction : std_logic;
-	signal direction_in : std_logic;
 	signal address_reg : std_logic_vector(9 downto 0);
-	signal address_reg_in : std_logic_vector(9 downto 0);
 	signal count_reg : std_logic_vector(9 downto 0);
-	signal count_reg_in : std_logic_vector(9 downto 0);
 
 	signal read_enable : std_logic;
-	signal read_enable_in : std_logic;
 	signal read_busy : std_logic;
 	signal write_enable : std_logic;
-	signal write_enable_in : std_logic;
 	signal write_busy : std_logic;
+
+	signal transfer_requested : std_logic;
+	signal transfer_finished : std_logic;
+	signal read_complete : std_logic;
+	signal write_complete : std_logic;
+
+	signal reg_load : std_logic;
+	signal reg_count : std_logic;
+
+	signal direction_load : std_logic;
+	signal direction_d : std_logic;
+
+	signal read_enable_load : std_logic;
+	signal read_enable_d : std_logic;
+
+	signal write_enable_load : std_logic;
+	signal write_enable_d : std_logic;
+
+	signal state_load : std_logic;
+	signal state_d : std_logic_vector(3 downto 0);
+
+	signal count_reg_is_zero : std_logic;
 begin
-	in_progress <= '0' when state = IDLE else '1';
+	in_progress <= not state(0);
 	busy <= in_progress;
 
 	err <= '0';
@@ -78,63 +92,66 @@ begin
 	write_busy <= scsi_data_busy when direction = '0' else mem_busy;
 
 	-- Control
-	process(state, sel, rw, start_address, transfer_size, count_reg, read_busy, write_busy, address_reg)
+	count_reg_is_zero <= '1' when count_reg = "0000000000" else '0';
+
+	transfer_requested <= state(0) and sel;
+	transfer_finished <= state(1) and count_reg_is_zero;
+	read_complete <= state(2) and not read_busy;
+	write_complete <= state(3) and not write_busy;
+
+	reg_load <= transfer_requested;
+	reg_count <= write_complete;
+
+	direction_load <= transfer_requested or transfer_finished;
+	direction_d <= rw when transfer_requested = '1' else '1';
+
+	read_enable_load <= state(1) or write_complete or transfer_finished;
+	read_enable_d <= state(1) and not count_reg_is_zero;
+
+	write_enable_load <= read_complete or write_complete or transfer_finished;
+	write_enable_d <= state(2);
+
+	state_load <= read_complete or state(1) or transfer_requested or write_complete or transfer_finished;
+	state_d <= read_complete & state(1) & (transfer_requested or write_complete) & transfer_finished;
+
+	-- Counters
+	process(clk)
 	begin
-		case state is
-			when IDLE =>
-				if sel = '1' then
-					direction_in <= rw;
-					address_reg_in <= start_address;
-					count_reg_in <= transfer_size;
-					state_in <= START;
-				end if;
-
-			when START =>
-				if count_reg = "0000000000" then
-					read_enable_in <= '0';
-					write_enable_in <= '0';
-					state_in <= IDLE;
-				else
-					read_enable_in <= '1';
-					write_enable_in <= '0';
-					state_in <= READ_WAIT;
-				end if;
-
-			when READ_WAIT =>
-				if read_busy = '0' then
-					write_enable_in <= '1';
-					state_in <= WRITE_WAIT;
-				end if;
-
-			when WRITE_WAIT =>
-				if write_busy = '0' then
-					read_enable_in <= '0';
-					write_enable_in <= '0';
-					address_reg_in <= address_reg + "0000000001";
-					count_reg_in <= count_reg + "1111111111";
-					state_in <= START;
-				end if;
-		end case;
+		if rising_edge(clk) then
+			if reg_load = '1' then
+				address_reg <= start_address;
+				count_reg <= transfer_size;
+			elsif reg_count = '1' then
+				address_reg <= address_reg + "0000000001";
+				count_reg <= count_reg + "1111111111";
+			end if;
+		end if;
 	end process;
 
+	-- Direction, read enable, write enable, and state
 	process(clk, rst)
 	begin
 		if rst = '1' then
+			direction <= '1';
 			read_enable <= '0';
 			write_enable <= '0';
-
-			direction <= '1';
-			address_reg <= "0000000000";
-			count_reg <= "0000000000";
-			state <= IDLE;
+			state <= "0001";
 		elsif rising_edge(clk) then
-			read_enable <= read_enable_in;
-			write_enable <= write_enable_in;
+			if direction_load = '1' then
+				direction <= direction_d;
+			end if;
 
-			direction <= direction_in;
-			address_reg <= address_reg_in;
-			count_reg <= count_reg_in;
-			state <= state_in;
+			if read_enable_load = '1' then
+				read_enable <= read_enable_d;
+			end if;
+
+			if write_enable_load = '1' then
+				write_enable <= write_enable_d;
+			end if;
+
+			if state_load = '1' then
+				state <= state_d;
+			end if;
 		end if;
 	end process;
 end architecture;
