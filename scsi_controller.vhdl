@@ -28,14 +28,16 @@ architecture behavioral of scsi_controller is
 	component scsi_data_bus_io
 		port(
 			rst : in std_logic;
-			sel : in std_logic;
-			rw : in std_logic;
+			clk : in std_logic;
+			write_enable : in std_logic;
+			output_enable : in std_logic;
+			direction : in std_logic;
 			busy : out std_logic;
 			err : out std_logic;
-			data : inout std_logic_vector(7 downto 0);
+			data_in : in std_logic_vector(7 downto 0);
+			data_out : out std_logic_vector(7 downto 0);
 
 			scsi_req : out std_logic;
-			scsi_io : out std_logic;
 			scsi_ack : in std_logic;
 			scsi_db : inout std_logic_vector(7 downto 0);
 			scsi_dbp : inout std_logic

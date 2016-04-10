@@ -54,12 +54,7 @@ begin
 	scsi_output_enable <= ((pending_reg and not pending_reg_next) or (not pending_reg and busy_reg)) and not direction and output_enable;
 	pending_reg_next <= input_write_enable or (pending_reg and req_reg and not scsi_ack);
 	busy_reg_next <= pending_reg or (busy_reg and not pending_reg and not req_reg_next);
-	--busy_reg_next <= pending_reg or (busy_reg and not pending_reg and scsi_ack);
-
-
 	req_reg_next <= (not busy_reg and not pending_reg) or (not busy_reg and pending_reg and not scsi_ack) or (busy_reg and not pending_reg and not scsi_ack) or (busy_reg and pending_reg);
-	--req_reg_next <= not (not busy_reg and pending_reg and scsi_ack) or not (busy_reg and not pending_reg and scsi_ack);
-	--req_reg_next <= (not busy_reg and not pending_reg) or (pending_reg and not scsi_ack) or (busy_reg and not scsi_ack);
 
 	-- Data registers
 	process(clk)

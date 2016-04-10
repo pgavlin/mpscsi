@@ -1,122 +1,151 @@
---------------------------------------------------------------------------------
--- Company: 
--- Engineer:
---
--- Create Date:	10:01:57 04/03/2016
--- Design Name:	
--- Module Name:	Z:/Documents/scsi/scsi_block_transfer_unit_tb.vhdl
--- Project Name:  scsi
--- Target Device:  
--- Tool versions:  
--- Description:	
--- 
--- VHDL Test Bench Created by ISE for module: scsi_block_transfer_unit
--- 
--- Dependencies:
--- 
--- Revision:
--- Revision 0.01 - File Created
--- Additional Comments:
---
--- Notes: 
--- This testbench has been automatically generated using types std_logic and
--- std_logic_vector for the ports of the unit under test.  Xilinx recommends
--- that these types always be used for the top-level I/O of a design in order
--- to guarantee that the testbench will bind correctly to the post-implementation 
--- simulation model.
---------------------------------------------------------------------------------
-LIBRARY ieee;
-USE ieee.std_logic_1164.ALL;
-USE ieee.numeric_std.ALL;
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
  
--- Uncomment the following library declaration if using
--- arithmetic functions with Signed or Unsigned values
---USE ieee.numeric_std.ALL;
+entity scsi_block_transfer_unit_tb is
+end scsi_block_transfer_unit_tb;
  
-ENTITY scsi_block_transfer_unit_tb IS
-END scsi_block_transfer_unit_tb;
+architecture behavior of scsi_block_transfer_unit_tb is 
  
-ARCHITECTURE behavior OF scsi_block_transfer_unit_tb IS 
+	 -- component declaration for the unit under test (uut)
  
-	 -- Component Declaration for the Unit Under Test (UUT)
- 
-	 COMPONENT scsi_block_transfer_unit
-	 PORT(
-			rst : IN  std_logic;
-			clk : IN  std_logic;
-			sel : IN  std_logic;
-			rw : IN  std_logic;
-			start_address : IN  std_logic_vector(9 downto 0);
-			transfer_size : IN  std_logic_vector(9 downto 0);
-			busy : OUT  std_logic;
-			err : OUT  std_logic;
-			mem_sel : OUT  std_logic;
-			mem_rw : OUT  std_logic;
-			mem_address : OUT  std_logic_vector(9 downto 0);
-			mem_busy : IN  std_logic;
-			mem_data : INOUT  std_logic_vector(7 downto 0);
-			scsi_data_sel : OUT  std_logic;
-			scsi_data_rw : OUT  std_logic;
-			scsi_data_busy : IN  std_logic;
-			scsi_data_err : IN  std_logic;
-			scsi_data : INOUT  std_logic_vector(7 downto 0)
-		  );
-	 END COMPONENT;
-	 
+	component scsi_block_transfer_unit
+		port(
+			-- Control bus signals
+			rst : in std_logic;
+			clk : in std_logic;
+			start : in std_logic;
+			direction : in std_logic;
+			start_address : in std_logic_vector(9 downto 0);
+			transfer_size : in std_logic_vector(9 downto 0);
+			busy : out std_logic;
+			err : out std_logic;
 
-	--Inputs
+			-- Memory bus signals
+			mem_chip_enable : out std_logic;
+			mem_write_enable : out std_logic;
+			mem_address : out std_logic_vector(9 downto 0);
+			mem_busy : in std_logic;
+			mem_data_in : in std_logic_vector(7 downto 0);
+			mem_data_out : out std_logic_vector(7 downto 0);
+
+			-- SCSI data bus signals
+			scsi_data_write_enable : out std_logic;
+			scsi_data_direction : out std_logic;
+			scsi_data_busy : in std_logic;
+			scsi_data_err : in std_logic;
+			scsi_data_in : in std_logic_vector(7 downto 0);
+			scsi_data_out : out std_logic_vector(7 downto 0)
+		);
+	end component;
+
+	component scsi_data_bus_io
+		port(
+			-- Internal bus signals
+			rst : in std_logic;
+			clk : in std_logic;
+			write_enable : in std_logic;
+			output_enable : in std_logic;
+			direction : in std_logic;
+			busy : out std_logic;
+			err : out std_logic;
+			data_in : in std_logic_vector(7 downto 0);
+			data_out : out std_logic_vector(7 downto 0);
+
+			-- SCSI bus signals
+			scsi_req : out std_logic;
+			scsi_ack : in std_logic;
+			scsi_db : inout std_logic_vector(7 downto 0);
+			scsi_dbp : inout std_logic
+		);
+	end component;
+
+	-- Control bus signals
 	signal rst : std_logic := '1';
 	signal clk : std_logic := '0';
-	signal sel : std_logic := '0';
-	signal rw : std_logic := '0';
+	signal start : std_logic := '0';
+	signal direction : std_logic := '0';
 	signal start_address : std_logic_vector(9 downto 0) := (others => '0');
 	signal transfer_size : std_logic_vector(9 downto 0) := (others => '0');
-	signal mem_busy : std_logic := '0';
-	signal scsi_data_busy : std_logic := '0';
-	signal scsi_data_err : std_logic := '0';
-
-	--BiDirs
-	signal mem_data : std_logic_vector(7 downto 0) := (others => 'Z');
-	signal scsi_data : std_logic_vector(7 downto 0) := (others => 'Z');
-
- 	--Outputs
 	signal busy : std_logic;
 	signal err : std_logic;
-	signal mem_sel : std_logic;
-	signal mem_rw : std_logic;
+
+	-- Memory signals
+	type mem is array(1023 downto 0) of std_logic_vector(7 downto 0);
+	signal mem1k : mem := (others => "00000000");
+
+	signal mem_chip_enable : std_logic;
+	signal mem_write_enable : std_logic;
 	signal mem_address : std_logic_vector(9 downto 0);
-	signal scsi_data_sel : std_logic;
-	signal scsi_data_rw : std_logic;
+	signal mem_busy : std_logic := '0';
+	signal mem_data_in : std_logic_vector(7 downto 0) := (others => '0');
+	signal mem_data_out : std_logic_vector(7 downto 0);
 
-	-- Clock period definitions
-	constant clk_period : time := 10 ns;
- 
-BEGIN
- 
-	-- Instantiate the Unit Under Test (UUT)
-	uut: scsi_block_transfer_unit PORT MAP (
-			 rst => rst,
-			 clk => clk,
-			 sel => sel,
-			 rw => rw,
-			 start_address => start_address,
-			 transfer_size => transfer_size,
-			 busy => busy,
-			 err => err,
-			 mem_sel => mem_sel,
-			 mem_rw => mem_rw,
-			 mem_address => mem_address,
-			 mem_busy => mem_busy,
-			 mem_data => mem_data,
-			 scsi_data_sel => scsi_data_sel,
-			 scsi_data_rw => scsi_data_rw,
-			 scsi_data_busy => scsi_data_busy,
-			 scsi_data_err => scsi_data_err,
-			 scsi_data => scsi_data
-		  );
+	-- SCSI data bus signals
+	signal scsi_data_write_enable : std_logic := 'L';
+	signal scsi_data_direction : std_logic := 'H';
+	signal scsi_data_busy : std_logic;
+	signal scsi_data_err : std_logic;
+	signal scsi_data_in : std_logic_vector(7 downto 0);
+	signal scsi_data_out : std_logic_vector(7 downto 0);
 
-	-- Clock process definitions
-	clk_process :process
+	-- SCSI signals
+	signal scsi_req : std_logic;
+	signal scsi_ack : std_logic;
+	signal scsi_db : std_logic_vector(7 downto 0);
+	signal scsi_dbp : std_logic;
+
+	-- clock period definitions
+	constant clk_period : time := 100 ns;
+begin
+	scsi_data_write_enable <= 'L';
+	scsi_data_direction <= 'H';
+	scsi_db <= (others => 'H');
+	scsi_dbp <= 'H';
+
+	uut : scsi_block_transfer_unit
+		port map(
+			rst => rst,
+			clk => clk,
+			start => start,
+			direction => direction,
+			start_address => start_address,
+			transfer_size => transfer_size,
+			busy => busy,
+			err => err,
+			mem_chip_enable => mem_chip_enable,
+			mem_write_enable => mem_write_enable,
+			mem_address => mem_address,
+			mem_busy => mem_busy,
+			mem_data_in => mem_data_in,
+			mem_data_out => mem_data_out,
+			scsi_data_write_enable => scsi_data_write_enable,
+			scsi_data_direction => scsi_data_direction,
+			scsi_data_busy => scsi_data_busy,
+			scsi_data_err => scsi_data_err,
+			scsi_data_in => scsi_data_in,
+			scsi_data_out => scsi_data_out
+		);
+
+	data_bus_io : scsi_data_bus_io
+		port map(
+			rst => rst,
+			clk => clk,
+			write_enable => scsi_data_write_enable,
+			output_enable => '1',
+			direction => scsi_data_direction,
+			busy => scsi_data_busy,
+			err => scsi_data_err,
+			data_in => scsi_data_out,
+			data_out => scsi_data_in,
+			scsi_req => scsi_req,
+			scsi_ack => scsi_ack,
+			scsi_db => scsi_db,
+			scsi_dbp => scsi_dbp
+		);
+
+	-- Clock process
+	process
 	begin
 		clk <= '0';
 		wait for clk_period/2;
@@ -125,69 +154,62 @@ BEGIN
 	end process;
 
 	-- Memory process
-	mem_proc : process(mem_sel)
-		type mem is array(1023 downto 0) of std_logic_vector(7 downto 0);
-		variable mem1k : mem := (others => "00000000");
+	process(clk, mem_chip_enable)
 	begin
-		if mem_sel = '0' then
-			mem_data <= "ZZZZZZZZ" after 1 ns;
-			mem_busy <= '0' after 1 ns;
-		elsif mem_sel = '1' then
-			mem_busy <= '1' after 1 ns, '0' after 10 ns;
+		if mem_chip_enable = '0' then
+			mem_busy <= '0';
+			mem_data_in <= (others => 'Z');
+		elsif rising_edge(clk) then
+			mem_data_in <= mem1k(to_integer(unsigned(mem_address)));
 
-			if mem_rw = '0' then
-				mem1k(to_integer(unsigned(mem_address))) := mem_data;
-			else
-				mem_data <= mem1k(to_integer(unsigned(mem_address))) after 5 ns;
+			if mem_write_enable = '1' then
+				mem1k(to_integer(unsigned(mem_address))) <= mem_data_out;
 			end if;
 		end if;
 	end process;
 
 	-- SCSI process
-	scsi_data_proc : process(scsi_data_sel)
+	process(scsi_req, direction)
 	begin
-		if scsi_data_sel = '0' then
-			scsi_data <= "ZZZZZZZZ" after 1 ns;
-			scsi_data_busy <= '0' after 1 ns;
-		elsif scsi_data_sel = '1' then
-			scsi_data_busy <= '1' after 1 ns, '0' after 10 ns;
+		if direction = '0' then
+			scsi_db <= (others => 'Z');
+			scsi_dbp <= 'Z';
+		else
+			scsi_db <= X"AA";
+			scsi_dbp <= '1';
+		end if;
 
-			if scsi_data_rw = '0' then
-				scsi_data <= "ZZZZZZZZ" after 5 ns;
-			else
-				scsi_data <= "10100101" after 5 ns;
-			end if;
+		if scsi_req = '0' then
+			scsi_ack <= '0';
+		else
+			scsi_ack <= '1';
 		end if;
 	end process;
 
 	-- Stimulus process
-	stim_proc: process
+	process
 	begin		
-		-- hold reset state for 100 ns.
-		wait for 100 ns;
+		wait for clk_period * 10;
 		rst <= '0';
-
-		wait for clk_period;
 
 		-- insert stimulus here 
 		start_address <= "0000010000";
 		transfer_size <= "0000001000";
 
-		rw <= '1';
-		sel <= '1';
+		direction <= '1';
+		start <= '1';
 		wait for clk_period;
 
-		sel <= '0';
+		start <= '0';
 		wait until busy = '0';
 
-		rw <= '0';
-		sel <= '1';
-		wait for clk_period * 2;
+		direction <= '0';
+		start <= '1';
+		wait for clk_period;
 
-		sel <= '0';
+		start <= '0';
 		wait until busy = '0';
 
 		wait;
 	end process;
-
-END;
+end;

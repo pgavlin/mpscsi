@@ -83,11 +83,13 @@ begin
 		wait for clk_period * 10;
 		rst <= '0';
 
-		-- Request a SCSI write
-		write_enable <= '1';
 		output_enable <= '1';
 		direction <= '0';
 		data_in <= X"AA";
+		wait for clk_period;
+
+		-- Request a SCSI write
+		write_enable <= '1';
 
 		wait until scsi_req = '0';
 		scsi_ack <= '0';
