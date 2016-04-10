@@ -171,7 +171,7 @@ begin
 	-- SCSI process
 	process(scsi_req, direction)
 	begin
-		if direction = '0' then
+		if direction = '1' then
 			scsi_db <= (others => 'Z');
 			scsi_dbp <= 'Z';
 		else
@@ -196,14 +196,14 @@ begin
 		start_address <= "0000010000";
 		transfer_size <= "0000001000";
 
-		direction <= '1';
+		direction <= '0';
 		start <= '1';
 		wait for clk_period;
 
 		start <= '0';
 		wait until busy = '0';
 
-		direction <= '0';
+		direction <= '1';
 		start <= '1';
 		wait for clk_period;
 

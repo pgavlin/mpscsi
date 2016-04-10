@@ -84,7 +84,7 @@ begin
 		rst <= '0';
 
 		output_enable <= '1';
-		direction <= '0';
+		direction <= '1';
 		data_in <= X"AA";
 		wait for clk_period;
 
@@ -99,7 +99,7 @@ begin
 		-- Request a SCSI read
 		write_enable <= '1';
 		output_enable <= '1';
-		direction <= '1';
+		direction <= '0';
 		scsi_db <= X"BB";
 		scsi_dbp <= '1';
 
@@ -111,7 +111,7 @@ begin
 		-- Request a SCSI write before the bus is free
 		write_enable <= '1';
 		output_enable <= '1';
-		direction <= '0';
+		direction <= '1';
 		data_in <= X"55";
 		scsi_ack <= '0';
 
@@ -130,7 +130,7 @@ begin
 		-- Request a SCSI read before the bus is free
 		write_enable <= '1';
 		output_enable <= '1';
-		direction <= '1';
+		direction <= '0';
 
 		wait for clk_period;
 		write_enable <= '0';

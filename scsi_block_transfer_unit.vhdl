@@ -70,20 +70,20 @@ begin
 	err <= '0';
 
 	mem_chip_enable <= 'Z' when in_progress = '0' else '1';
-	mem_write_enable <= 'Z' when in_progress = '0' else write_enable and direction_reg;
+	mem_write_enable <= 'Z' when in_progress = '0' else write_enable and not direction_reg;
 	mem_address <= (others => 'Z') when in_progress = '0' else address_reg;
 	mem_data_out <= (others => 'Z') when in_progress = '0' else scsi_data_in;
 
 	scsi_data_write_enable <= 'Z' when in_progress = '0' else
-	                          write_enable when direction_reg = '0' else
+	                          write_enable when direction_reg = '1' else
 	                          read_enable;
 	scsi_data_direction <= 'Z' when in_progress = '0' else direction_reg;
 	scsi_data_out <= (others => 'Z') when in_progress = '0' else mem_data_in;
 
 	read_enable <= state(1) and not count_reg_is_zero;
 	write_enable <= state(2);
-	read_busy <= mem_busy when direction_reg = '0' else scsi_data_busy;
-	write_busy <= scsi_data_busy when direction_reg = '0' else mem_busy;
+	read_busy <= mem_busy when direction_reg = '1' else scsi_data_busy;
+	write_busy <= scsi_data_busy when direction_reg = '1' else mem_busy;
 
 	-- Control
 	count_reg_is_zero <= '1' when count_reg = "0000000000" else '0';
@@ -120,7 +120,7 @@ begin
 	process(clk, rst)
 	begin
 		if rst = '1' then
-			direction_reg <= '1';
+			direction_reg <= '0';
 			state <= "0001";
 		elsif rising_edge(clk) then
 			if direction_load = '1' then

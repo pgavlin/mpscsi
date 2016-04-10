@@ -38,7 +38,7 @@ architecture behavioral of scsi_data_bus_io is
 	signal err_reg : std_logic;
 
 	-- Control registers
-	signal direction_reg : std_logic; -- 1 = input, 0 = output
+	signal direction_reg : std_logic; -- 0 = input, 1 = output
 	signal pending_reg : std_logic;
 	signal busy_reg : std_logic;
 	signal req_reg : std_logic;
@@ -50,8 +50,8 @@ architecture behavioral of scsi_data_bus_io is
 begin
 	-- Control signals
 	input_write_enable <= not busy_reg and write_enable;
-	output_write_enable <= busy_reg and not req_reg and not scsi_ack and direction;
-	scsi_output_enable <= ((pending_reg and not pending_reg_next) or (not pending_reg and busy_reg)) and not direction and output_enable;
+	output_write_enable <= busy_reg and not req_reg and not scsi_ack and not direction_reg;
+	scsi_output_enable <= ((pending_reg and not pending_reg_next) or (not pending_reg and busy_reg)) and direction_reg and output_enable;
 	pending_reg_next <= input_write_enable or (pending_reg and req_reg and not scsi_ack);
 	busy_reg_next <= pending_reg or (busy_reg and not pending_reg and not req_reg_next);
 	req_reg_next <= (not busy_reg and not pending_reg) or (not busy_reg and pending_reg and not scsi_ack) or (busy_reg and not pending_reg and not scsi_ack) or (busy_reg and pending_reg);
@@ -83,7 +83,7 @@ begin
 	process(rst, clk)
 	begin
 		if rst = '1' then
-			direction_reg <= '1';
+			direction_reg <= '0';
 		elsif rising_edge(clk) then
 			if input_write_enable = '1' then
 				direction_reg <= direction;
@@ -112,7 +112,7 @@ begin
 	end process;
 
 	-- Parity generation
-	parity_data <= input_data_reg when direction_reg = '0' else scsi_db;
+	parity_data <= input_data_reg when direction_reg = '1' else scsi_db;
 	parity <= not (((parity_data(7) xor parity_data(6)) xor (parity_data(5) xor parity_data(4))) xor ((parity_data(3) xor parity_data(2)) xor (parity_data(1) xor parity_data(0))));
 	parity_err <= parity xor scsi_dbp;
 
