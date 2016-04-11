@@ -1,0 +1,22 @@
+net "rst" loc = p84; # Reset pin
+net "clk" loc = p43; # 12 MHz input clock
+
+net "scsi_bsy" loc = p88;
+net "scsi_msg" loc = p89;
+net "scsi_cd"  loc = p93;
+net "scsi_io"  loc = p94;
+net "scsi_sel" loc = p97;
+net "scsi_req" loc = p3;
+net "scsi_ack" loc = p7;
+net "scsi_atn" loc = p21;
+
+net "scsi_dbp" loc = p4;
+net "scsi_db[0]" loc = p12;
+net "scsi_db[1]" loc = p13;
+net "scsi_db[2]" loc = p19;
+net "scsi_db[3]" loc = p20;
+net "scsi_db[4]" loc = p32;
+net "scsi_db[5]" loc = p33;
+net "scsi_db[6]" loc = p34;
+net "scsi_db[7]" loc = p35;
+
