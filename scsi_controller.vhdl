@@ -22,8 +22,6 @@ entity scsi_controller is
 	);
 end entity;
 
--- TODO: simplify components using read/write ports
-
 architecture behavioral of scsi_controller is
 	component scsi_data_bus_io
 		port(
@@ -48,22 +46,26 @@ architecture behavioral of scsi_controller is
 		port(
 			rst : in std_logic;
 			clk : in std_logic;
-			sel : in std_logic;
-			rw : in std_logic;
+			start : in std_logic;
+			direction : in std_logic;
 			start_address : in std_logic_vector(9 downto 0);
 			transfer_size : in std_logic_vector(9 downto 0);
 			busy : out std_logic;
 			err : out std_logic;
-			mem_sel : out std_logic;
-			mem_rw : out std_logic;
+
+			mem_chip_enable : out std_logic;
+			mem_write_enable : out std_logic;
 			mem_address : out std_logic_vector(9 downto 0);
 			mem_busy : in std_logic;
-			mem_data : inout std_logic_vector(7 downto 0);
-			scsi_data_sel : out std_logic;
-			scsi_data_rw : out std_logic;
+			mem_data_in : in std_logic_vector(7 downto 0);
+			mem_data_out : out std_logic_vector(7 downto 0);
+
+			scsi_data_write_enable : out std_logic;
+			scsi_data_direction : out std_logic;
 			scsi_data_busy : in std_logic;
 			scsi_data_err : in std_logic;
-			scsi_data : inout std_logic_vector(7 downto 0)
+			scsi_data_in : in std_logic_vector(7 downto 0);
+			scsi_data_out : out std_logic_vector(7 downto 0)
 		);
 	end component;
 
@@ -115,35 +117,36 @@ architecture behavioral of scsi_controller is
 	end component;
 
 	-- Muxed data bus IO unit lines
-	signal data_bus_io_sel : std_logic;
-	signal data_bus_io_rw : std_logic;
-	signal data_bus_io_data_mux : std_logic_vector(7 downto 0);
-	signal data_bus_io_data : std_logic_vector(7 downto 0);
+	signal data_bus_io_write_enable : std_logic;
+	signal data_bus_io_direction : std_logic;
 	signal data_bus_io_busy : std_logic;
 	signal data_bus_io_err : std_logic;
+	signal data_bus_io_data_in : std_logic_vector(7 downto 0);
+	signal data_bus_io_data_out : std_logic_vector(7 downto 0);
 
 	-- Muxed block transfer unit lines
-	signal block_transfer_scsi_data_sel : std_logic;
-	signal block_transfer_scsi_data_rw : std_logic;
-	signal block_transfer_scsi_data : std_logic_vector(7 downto 0);
+	signal block_transfer_start : std_logic;
+	signal block_transfer_direction : std_logic;
+	signal block_transfer_busy : std_logic;
+	signal block_transfer_err : std_logic;
 
 	-- Command buffer
 	type command_buf_mem is array (31 downto 0) of std_logic_vector(7 downto 0);
 	signal command_buf : command_buf_mem;
 	signal command_buf_selector : std_logic;
 	signal command_buf_we : std_logic;
-	signal command_buf_address_mux : std_logic_vector(4 downto 0);
 	signal command_buf_address : std_logic_vector(4 downto 0);
-	signal command_buf_output : std_logic_vector(7 downto 0);
-	signal command_buf_data_mux : std_logic_vector(7 downto 0);
-	signal command_buf_data : std_logic_vector(7 downto 0);
+	signal command_buf_data_in : std_logic_vector(7 downto 0);
+	signal command_buf_data_out : std_logic_vector(7 downto 0);
 
 	-- Block transfer buffers
-	signal block_transfer_mem_sel : std_logic;
-	signal block_transfer_mem_rw : std_logic;
+	signal block_transfer_scsi_write_enable : std_logic;
+	signal block_transfer_scsi_direction : std_logic;
+	signal block_transfer_scsi_data_out : std_logic_vector(7 downto 0);
+	signal block_transfer_mem_chip_enable : std_logic;
+	signal block_transfer_mem_write_enable : std_logic;
 	signal block_transfer_mem_address : std_logic_vector(9 downto 0);
-	signal block_transfer_mem_data : std_logic_vector(7 downto 0);
-	signal block_transfer_mem_busy : std_logic;
+	signal block_transfer_mem_data_out : std_logic_vector(7 downto 0);
 
 	-- Select detect lines
 	signal select_detect_sel : std_logic;
@@ -154,30 +157,24 @@ architecture behavioral of scsi_controller is
 	signal port_selector : std_logic_vector(8 downto 0);
 
 	-- Port 0
-	-- 8                                                                                        0
-	-- | X | OUTPUT_ENABLE | SCSI_BSY | SCSI_MSG | SCSI_CD | SCSI_ATN | SCSI_SEL | SELECTED |
+	-- 8                                                                                          0
+	-- | OUTPUT_ENABLE | SCSI_BSY | SCSI_MSG | SCSI_CD | SCSI_IO | SCSI_ATN | SCSI_SEL | SELECTED |
 	signal scsi_control_reg : std_logic_vector(7 downto 0);
 
-	-- Ports 1 and 2
-	--
-	-- Control register:
-	-- 8                                       0
-	-- | X | X | X | X | ERR | BUSY | RW | SEL |
-	signal data_bus_io_control_reg : std_logic_vector(7 downto 0);
-	signal data_bus_io_data_reg : std_logic_vector(7 downto 0);
-	signal data_bus_io_strobe_rst : std_logic;
-	signal data_bus_io_strobe_write : std_logic;
+	-- Port 1: transfer control register
+	-- 8                                        0
+	-- | X | X | X | X | X | ERR | BUSY | START |
+	signal transfer_control_reg : std_logic_vector(7 downto 0);
+	signal transfer_strobe_rst : std_logic;
+	signal transfer_strobe_write : std_logic;
 
-	-- Ports 3 through 7
-	--
-	-- Control register:
-	-- 8                                       0
-	-- | X | X | X | X | ERR | BUSY | RW | SEL |
-	signal block_transfer_control_reg : std_logic_vector(7 downto 0);
-	signal block_transfer_strobe_rst : std_logic;
-	signal block_transfer_strobe_write : std_logic;
-	signal block_transfer_address_reg : std_logic_vector(9 downto 0);
-	signal block_transfer_size_reg : std_logic_vector(9 downto 0);
+	-- Port 2: transfer data register
+
+	-- Ports 3 and 4: block transfer start address register
+	signal transfer_address_reg : std_logic_vector(9 downto 0);
+
+	-- Ports 5 and 6: block transfer size register
+	signal transfer_size_reg : std_logic_vector(9 downto 0);
 
 	-- KCPSM6 signals
 	signal proc_address : std_logic_vector(11 downto 0);
@@ -193,20 +190,21 @@ architecture behavioral of scsi_controller is
 	signal proc_interrupt_ack : std_logic;
 	signal proc_sleep : std_logic;
 begin
-
 	-- Component instantiations
 	data_bus_io : scsi_data_bus_io
 		port map(
 			rst => rst,
+			clk => clk,
 
-			sel => data_bus_io_sel,
-			rw => data_bus_io_rw,
+			write_enable => data_bus_io_write_enable,
+			output_enable => scsi_control_reg(7),
+			direction => data_bus_io_direction,
 			busy => data_bus_io_busy,
 			err => data_bus_io_err,
-			data => data_bus_io_data,
+			data_in => data_bus_io_data_in,
+			data_out => data_bus_io_data_out,
 
 			scsi_req => scsi_req,
-			scsi_io => scsi_io,
 			scsi_ack => scsi_ack,
 			scsi_db => scsi_db,
 			scsi_dbp => scsi_dbp
@@ -217,24 +215,26 @@ begin
 			rst => rst,
 			clk => clk,
 
-			sel => block_transfer_control_reg(0),
-			rw => block_transfer_control_reg(1),
-			start_address => block_transfer_address_reg,
-			transfer_size => block_transfer_size_reg,
-			busy => block_transfer_control_reg(2),
-			err => block_transfer_control_reg(3),
+			start => transfer_control_reg(0),
+			direction => scsi_control_reg(3),
+			start_address => transfer_address_reg,
+			transfer_size => transfer_size_reg,
+			busy => block_transfer_busy,
+			err => block_transfer_err,
 
-			mem_sel => block_transfer_mem_sel,
+			mem_chip_enable => block_transfer_mem_chip_enable,
+			mem_write_enable => block_transfer_mem_write_enable,
 			mem_address => block_transfer_mem_address,
-			mem_rw => block_transfer_mem_rw,
-			mem_busy => block_transfer_mem_busy,
-			mem_data => block_transfer_mem_data,
+			mem_busy => '0',
+			mem_data_in => command_buf_data_out,
+			mem_data_out => block_transfer_mem_data_out,
 
-			scsi_data_sel => block_transfer_scsi_data_sel,
-			scsi_data_rw => block_transfer_scsi_data_rw,
+			scsi_data_write_enable => block_transfer_scsi_write_enable,
+			scsi_data_direction => block_transfer_scsi_direction,
 			scsi_data_busy => data_bus_io_busy,
 			scsi_data_err => data_bus_io_err,
-			scsi_data => block_transfer_scsi_data
+			scsi_data_in => data_bus_io_data_out,
+			scsi_data_out => block_transfer_scsi_data_out
 		);
 
 	select_detect : scsi_select_detect
@@ -287,42 +287,40 @@ begin
 			clk => clk
 		);
 
-	-- Block transfer lines
-	block_transfer_mem_busy <= '0';
-	block_transfer_mem_data <= command_buf_data when block_transfer_mem_rw = '1' else (others => 'Z');
-	block_transfer_scsi_data <= data_bus_io_data;
+	-- Data transfer unit signals
+	data_bus_io_write_enable <= (proc_write_strobe and port_selector(2)) when block_transfer_busy = '0' else block_transfer_scsi_write_enable;
+	data_bus_io_direction <= scsi_control_reg(3) when block_transfer_busy = '0' else block_transfer_scsi_direction;
+	data_bus_io_data_in <= proc_out_port when block_transfer_busy = '0' else block_transfer_scsi_data_out;
+
+	transfer_control_reg(1) <= data_bus_io_busy or block_transfer_busy;
+	transfer_control_reg(2) <= data_bus_io_err or block_transfer_err;
 
 	-- SCSI ID
 	select_detect_sel <= '1';
 	select_detect_id_mask <= X"02";
 
-	-- SCSI data bus I/O unit
-	data_bus_io_sel <= data_bus_io_control_reg(0) when block_transfer_control_reg(0) = '0' and block_transfer_control_reg(2) = '0' else block_transfer_scsi_data_sel;
-	data_bus_io_rw <= data_bus_io_control_reg(1) when block_transfer_control_reg(0) = '0' and block_transfer_control_reg(2) = '0' else block_transfer_scsi_data_rw;
-	data_bus_io_control_reg(2) <= data_bus_io_busy;
-	data_bus_io_control_reg(3) <= data_bus_io_err;
-
-	data_bus_io_data_mux <= data_bus_io_data_reg when block_transfer_control_reg(0) = '0' and block_transfer_control_reg(2) = '0' else block_transfer_scsi_data;
-	data_bus_io_data <= "ZZZZZZZZ" when data_bus_io_rw = '1' else data_bus_io_data_mux;
-
 	-- SCSI control bus buffers
-	scsi_bsy <= 'Z' when scsi_control_reg(6) = '0' else not scsi_control_reg(5);
-	scsi_msg <= 'Z' when scsi_control_reg(6) = '0' else not scsi_control_reg(4);
-	scsi_cd <= 'Z' when scsi_control_reg(6) = '0' else not scsi_control_reg(3);
+	scsi_bsy <= 'Z' when scsi_control_reg(7) = '0' else not scsi_control_reg(6);
+	scsi_msg <= 'Z' when scsi_control_reg(7) = '0' else not scsi_control_reg(5);
+	scsi_cd <= 'Z' when scsi_control_reg(7) = '0' else not scsi_control_reg(4);
+	scsi_io <= 'Z' when scsi_control_reg(7) = '0' else not scsi_control_reg(3);
+
+	scsi_control_reg(2 downto 0) <= (not scsi_atn) & (not scsi_sel) & select_detect_selected;
 
 	-- Command buffer
 	command_buf_selector <= proc_write_strobe and port_selector(8);
-	command_buf_we <= proc_write_strobe when command_buf_selector = '1' else not block_transfer_mem_rw and block_transfer_mem_sel;
-	command_buf_address_mux <= proc_port_id(4 downto 0) when command_buf_selector = '1' else block_transfer_mem_address(4 downto 0);
-	command_buf_data_mux <= proc_out_port when command_buf_selector = '1' else block_transfer_mem_data;
-	command_buf_data <= command_buf(to_integer(unsigned(command_buf_address_mux))) when command_buf_we = '0' else command_buf_data_mux;
+	command_buf_we <= proc_write_strobe when command_buf_selector = '1' else block_transfer_mem_write_enable and block_transfer_mem_chip_enable;
+	command_buf_address <= proc_port_id(4 downto 0) when command_buf_selector = '1' else block_transfer_mem_address(4 downto 0);
+	command_buf_data_in <= proc_out_port when command_buf_selector = '1' else block_transfer_mem_data_out;
 
-	command_buffer : process(rst, clk)
+	command_buffer : process(clk)
 	begin
-		if rst = '1' then
-			command_buf <= (others => X"00");
-		elsif rising_edge(clk) and command_buf_we = '1' then
-			command_buf(to_integer(unsigned(command_buf_address_mux))) <= command_buf_data_mux;
+		if rising_edge(clk) then
+			command_buf_data_out <= command_buf(to_integer(unsigned(command_buf_address)));
+
+			if command_buf_we = '1' then
+				command_buf(to_integer(unsigned(command_buf_address))) <= command_buf_data_in;
+			end if;
 		end if;
 	end process;
 
@@ -346,65 +344,44 @@ begin
 		end if;
 	end process;
 
-	data_bus_io_strobe_rst <= rst or data_bus_io_control_reg(2);
-	data_bus_io_strobe_write <= proc_write_strobe and port_selector(1);
-	data_bus_io_strobe : process(data_bus_io_strobe_rst, clk)
+	transfer_strobe_rst <= rst or transfer_control_reg(1);
+	transfer_strobe_write <= proc_write_strobe and port_selector(1);
+	transfer_strobe : process(transfer_strobe_rst, clk)
 	begin
-		if data_bus_io_strobe_rst = '1' then
-			data_bus_io_control_reg(0) <= '0';
-		elsif rising_edge(clk) and data_bus_io_strobe_write = '1' then
-			data_bus_io_control_reg(0) <= proc_out_port(0);
-		end if;
-	end process;
-
-	block_transfer_strobe_rst <= rst or block_transfer_control_reg(2);
-	block_transfer_strobe_write <= proc_write_strobe and port_selector(3);
-	block_transfer_strobe : process(block_transfer_strobe_rst, clk)
-	begin
-		if block_transfer_strobe_rst = '1' then
-			block_transfer_control_reg(0) <= '0';
-		elsif rising_edge(clk) and block_transfer_strobe_write = '1' then
-			block_transfer_control_reg(0) <= proc_out_port(0);
+		if transfer_strobe_rst = '1' then
+			transfer_control_reg(0) <= '0';
+		elsif rising_edge(clk) then
+			if transfer_strobe_write = '1' then
+				transfer_control_reg(0) <= proc_out_port(0);
+			end if;
 		end if;
 	end process;
 
 	control_registers : process(rst, clk)
 	begin
 		if rst = '1' then
-			scsi_control_reg(6 downto 3) <= "0000";
+			scsi_control_reg(7 downto 3) <= "00000";
 
-			data_bus_io_control_reg(1) <= '0';
-			data_bus_io_data_reg <= X"00";
+			transfer_address_reg <= "0000000000";
+			transfer_size_reg <= "0000000000";
+		elsif rising_edge(clk) then
+			if proc_write_strobe = '1' then
+				if port_selector(0) = '1' then
+					scsi_control_reg(7 downto 3) <= proc_out_port(7 downto 3);
+				end if;
 
-			block_transfer_control_reg(1) <= '1';
-			block_transfer_address_reg <= "0000000000";
-			block_transfer_size_reg <= "0000000000";
-		elsif rising_edge(clk) and proc_write_strobe = '1' then
-			if port_selector(0) = '1' then
-				scsi_control_reg(6 downto 3) <= proc_out_port(6 downto 3);
-			end if;
-
-			if port_selector(1) = '1' then
-				data_bus_io_control_reg(1) <= proc_out_port(1);
-			end if;
-			if port_selector(2) = '1' then
-				data_bus_io_data_reg(7 downto 0) <= proc_out_port;
-			end if;
-
-			if port_selector(3) = '1' then
-				block_transfer_control_reg(1) <= proc_out_port(1);
-			end if;
-			if port_selector(4) = '1' then
-				block_transfer_address_reg(7 downto 0) <= proc_out_port;
-			end if;
-			if port_selector(5) = '1' then
-				block_transfer_address_reg(9 downto 8) <= proc_out_port(1 downto 0);
-			end if;
-			if port_selector(6) = '1' then
-				block_transfer_size_reg(7 downto 0) <= proc_out_port;
-			end if;
-			if port_selector(7) = '1' then
-				block_transfer_size_reg(9 downto 8) <= proc_out_port(1 downto 0);
+				if port_selector(3) = '1' then
+					transfer_address_reg(7 downto 0) <= proc_out_port;
+				end if;
+				if port_selector(4) = '1' then
+					transfer_address_reg(9 downto 8) <= proc_out_port(1 downto 0);
+				end if;
+				if port_selector(5) = '1' then
+					transfer_size_reg(7 downto 0) <= proc_out_port;
+				end if;
+				if port_selector(6) = '1' then
+					transfer_size_reg(9 downto 8) <= proc_out_port(1 downto 0);
+				end if;
 			end if;
 		end if;
 	end process;
@@ -418,19 +395,15 @@ begin
 			if proc_port_id(5) = '0' then
 				case proc_port_id(2 downto 0) is
 					when "000" => proc_in_port <= scsi_control_reg;
-					when "001" => proc_in_port <= data_bus_io_control_reg;
-					when "010" => proc_in_port <= data_bus_io_data;
-					when "011" => proc_in_port <= block_transfer_control_reg;
+					when "001" => proc_in_port <= transfer_control_reg;
+					when "010" => proc_in_port <= data_bus_io_data_out;
 					when others => proc_in_port <= X"00";
 				end case;
 			else
-				proc_in_port <= command_buf_data;
+				proc_in_port <= command_buf_data_out;
 			end if;
 		end if;
 	end process;
-
-	scsi_control_reg(2 downto 0) <= (not scsi_atn) & (not scsi_sel) & select_detect_selected;
-	data_bus_io_control_reg(3 downto 2) <= data_bus_io_err & data_bus_io_busy;
 
 	-- KCPSM6 misc. signals
 	proc_interrupt <= '0';

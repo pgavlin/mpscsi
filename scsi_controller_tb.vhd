@@ -57,6 +57,7 @@ ARCHITECTURE behavior OF scsi_controller_tb IS
 	 END COMPONENT;
 	 
 	for uut: scsi_controller use entity work.scsi_controller(Structure);
+	--for uut: scsi_controller use entity work.scsi_controller(behavioral);
 
 	--Inputs
 	signal rst : std_logic := '1';
@@ -182,10 +183,10 @@ BEGIN
 					scsi_dbp <= not (data(0) xor data(1) xor data(2) xor data(3) xor data(4) xor data(5) xor data(6) xor data(7));
 				end if;
 
-				wait for 5 ns;
+				wait for 100 ns;
 				scsi_ack <= '0';
 				wait until scsi_req = '1';
-				wait for 5 ns;
+				wait for 10 ns;
 				scsi_ack <= '1';
 
 				scsi_db <= (others => 'H');

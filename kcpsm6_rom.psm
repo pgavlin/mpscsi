@@ -1,33 +1,26 @@
 	; Port addresses
 	constant scsi_control, 0'd
-	constant data_bus_io_control, 1'd
-	constant data_bus_io_data, 2'd
-	constant block_transfer_control, 3'd
-	constant block_transfer_address_lo, 4'd
-	constant block_transfer_address_hi, 5'd
-	constant block_transfer_size_lo, 6'd
-	constant block_transfer_size_hi, 7'd
+	constant transfer_control, 1'd
+	constant transfer_data, 2'd
+	constant transfer_address_lo, 3'd
+	constant transfer_address_hi, 4'd
+	constant transfer_size_lo, 5'd
+	constant transfer_size_hi, 6'd
 
 	; SCSI control register bits
 	constant scsi_control_selected, 01
 	constant scsi_control_sel, 02
 	constant scsi_control_atn, 04
-	constant scsi_control_cd, 08
-	constant scsi_control_msg, 10
-	constant scsi_control_bsy, 20
-	constant scsi_control_en, 40
+	constant scsi_control_io, 08
+	constant scsi_control_cd, 10
+	constant scsi_control_msg, 20
+	constant scsi_control_bsy, 40
+	constant scsi_control_en, 80
 
-	; Data bus I/O control register bits
-	constant data_bus_io_control_sel, 01
-	constant data_bus_io_control_rw, 02
-	constant data_bus_io_control_busy, 04
-	constant data_bus_io_control_err, 08
-
-	; Block transfer control register bits
-	constant block_transfer_control_sel, 01
-	constant block_transfer_control_rw, 02
-	constant block_transfer_control_busy, 04
-	constant block_transfer_control_err, 08
+	; Transfer control register bits
+	constant transfer_control_start, 01
+	constant transfer_control_busy, 02
+	constant transfer_control_err, 04
 
 start:
 	load s0, 00
@@ -39,7 +32,7 @@ wait_for_select:
 	jump z, wait_for_select
 
 assert_bsy:
-	load s0, 60
+	load s0, c0
 	output s0, scsi_control
 
 wait_for_selected:
@@ -48,11 +41,9 @@ wait_for_selected:
 	jump nz, wait_for_selected
 
 command:
-	load s0, 68
-	output s0, scsi_control
-	load s0, 03
+	load s0, d0
 	call transfer_byte
-	input s0, data_bus_io_data
+	input s0, transfer_data
 	output s0, 20
 	rl s0
 	rl s0
@@ -64,50 +55,45 @@ command:
 	addcy sB, 00
 	call@ (sB, sA)
 	compare s0, ff
-	load s2, s0
-	load s0, 01
-	load s1, 00
-	load s3, 00
-	load s4, 03
-	call block_transfer
+	load s3, s0
+	load s0, d0
+	load s1, 01
+	load s2, 00
+	load s4, 00
+	load s5, 03
+	call transfer_block
 
 status:
-	load s0, 02
-	output s0, data_bus_io_data
-	load s0, 01
+	load s0, d8
+	load s1, 02
 	call transfer_byte
 
 command_complete:
-	load s0, 78
-	output s0, scsi_control
-	load s0, 00
-	output s0, data_bus_io_data
-	load s0, 01
+	load s0, f8
+	load s1, 00
 	call transfer_byte
 
 done:
 	jump start
 
+transfer_block:
+	output s0, scsi_control
+	output s1, transfer_address_lo
+	output s2, transfer_address_hi
+	output s3, transfer_size_lo
+	output s4, transfer_size_hi
+	load s0, 01
+	output s0, 01
+	jump transfer_data_wait
+
 transfer_byte:
-	output s0, data_bus_io_control
-transfer_byte_wait:
-	input s0, data_bus_io_control
-	test s0, 0c
-	jump nz, transfer_byte_wait
+	output s0, scsi_control
+	output s1, transfer_data
+transfer_data_wait:
+	input s0, transfer_control
+	test s0, 06
+	jump nz, transfer_data_wait
 	return
-
-block_transfer:
-	output s0, block_transfer_address_lo
-	output s1, block_transfer_address_hi
-	output s2, block_transfer_size_lo
-	output s3, block_transfer_size_hi
-	output s4, block_transfer_control
-block_transfer_wait:
-	input s0, block_transfer_control
-	test s0, 0c
-	jump nz, block_transfer_wait
-	return
-
 
 table command_size#, [05, 09, 09, ff, ff, 0b, ff, ff]
 get_command_size:
